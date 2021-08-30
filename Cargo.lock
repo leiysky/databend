@@ -1964,9 +1964,9 @@ dependencies = [
 
 [[package]]
 name = "msql-srv"
-version = "0.9.3"
+version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8abd5a8795c8ae6888275fa43bed844991de703a7b9850a1de9066dcf90546ea"
+checksum = "57090c1095aa021df8094ba8a2fc2b658a4ea1f542e338b3620d882e07076b3e"
 dependencies = [
  "byteorder",
  "chrono",
