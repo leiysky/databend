@@ -1184,7 +1184,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "log",
- "metrics",
+ "metrics 0.18.0",
  "metrics-exporter-prometheus",
  "msql-srv",
  "num 0.4.0",
@@ -1226,7 +1226,7 @@ dependencies = [
  "lazy_static",
  "log",
  "maplit",
- "metrics",
+ "metrics 0.18.0",
  "metrics-exporter-prometheus",
  "num 0.4.0",
  "num_cpus",
@@ -1862,8 +1862,18 @@ version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58e285601dcfb9f3a8f37a7093b9956a0df730b50848c8ac0117406aff06c851"
 dependencies = [
- "metrics-macros",
+ "metrics-macros 0.2.0",
  "proc-macro-hack",
+]
+
+[[package]]
+name = "metrics"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f601807a248964869e222d209fd5f8e5bcc5542e4c9b1ef21bcee4424868ce5"
+dependencies = [
+ "ahash",
+ "metrics-macros 0.5.0",
 ]
 
 [[package]]
@@ -1873,7 +1883,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d23bb354bd7dd5d244f2e9a389a0c3249bb6b994aca71bd6c2f7cd6fa2657fc"
 dependencies = [
  "hyper",
- "metrics",
+ "metrics 0.14.2",
  "metrics-util",
  "parking_lot",
  "quanta",
@@ -1896,6 +1906,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics-macros"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44128401debcab0d777da11d005419b4d6ad6da8cb5eea64487c34ee0a311cf5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "metrics-util"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1907,7 +1928,7 @@ dependencies = [
  "crossbeam-utils 0.8.3",
  "dashmap",
  "indexmap",
- "metrics",
+ "metrics 0.14.2",
  "ordered-float 2.1.1",
  "parking_lot",
  "quanta",
