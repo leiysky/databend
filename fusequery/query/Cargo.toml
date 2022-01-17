@@ -30,7 +30,7 @@ common-ext = {path= "../../common/ext"}
 clickhouse-srv = { git = "https://github.com/sundy-li/clickhouse-svr", rev = "29765fc"}
 
 # Crates.io dependencies
-ahash = "0.7.2"
+ahash = "0.7.6"
 anyhow = "1.0.40"
 async-trait = "0.1"
 crossbeam = "0.8"
