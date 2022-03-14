@@ -23,4 +23,4 @@ indexmap = "1.6.1"
 lazy_static = "1.4.0"
 
 [dev-dependencies]
-pretty_assertions = "0.7"
+pretty_assertions = "1.2"
