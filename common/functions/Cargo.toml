@@ -18,7 +18,7 @@ common-exception = {path = "../exception"}
 
 # Crates.io dependencies
 anyhow = "1.0.40"
-dyn-clone = "1.0.4"
+dyn-clone = "1.0.5"
 indexmap = "1.6.1"
 lazy_static = "1.4.0"
 
