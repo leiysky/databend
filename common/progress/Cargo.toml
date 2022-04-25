@@ -13,7 +13,7 @@ common-infallible = {path = "../infallible"}
 # Github dependencies
 
 # Crates.io dependencies
-anyhow = "1.0.40"
+anyhow = "1.0.57"
 
 [dev-dependencies]
 pretty_assertions = "0.7"

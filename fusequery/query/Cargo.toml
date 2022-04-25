@@ -31,7 +31,7 @@ clickhouse-srv = { git = "https://github.com/sundy-li/clickhouse-svr", rev = "29
 
 # Crates.io dependencies
 ahash = "0.7.2"
-anyhow = "1.0.40"
+anyhow = "1.0.57"
 async-trait = "0.1"
 crossbeam = "0.8"
 env_logger = "0.8"
