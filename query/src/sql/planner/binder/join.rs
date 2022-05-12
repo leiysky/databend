@@ -175,7 +175,7 @@ impl<'a> JoinConditionResolver<'a> {
                     right_join_conditions,
                     other_join_conditions,
                 )
-                .await?;
+                    .await?;
             }
             JoinCondition::Using(_) => {
                 return Err(ErrorCode::UnImplement("USING clause is not supported yet. Please specify join condition with ON clause."));
@@ -208,7 +208,7 @@ impl<'a> JoinConditionResolver<'a> {
                 right_join_conditions,
                 other_join_conditions,
             )
-            .await?;
+                .await?;
         }
         Ok(())
     }
@@ -264,6 +264,8 @@ impl<'a> JoinConditionResolver<'a> {
             {
                 left_join_conditions.push(right);
                 right_join_conditions.push(left);
+            } else {
+                other_join_conditions.push(predicate.clone());
             }
         } else {
             other_join_conditions.push(predicate.clone());
