@@ -26,7 +26,9 @@ mod sort;
 
 use std::any::Any;
 
+pub use aggregate::AggregateItem;
 pub use aggregate::AggregatePlan;
+pub use aggregate::GroupItem;
 use enum_dispatch::enum_dispatch;
 pub use filter::FilterPlan;
 pub use hash_join::PhysicalHashJoin;

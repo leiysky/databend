@@ -164,6 +164,13 @@ impl DataSchemaRefExt {
     pub fn create(fields: Vec<DataField>) -> DataSchemaRef {
         Arc::new(DataSchema::new(fields))
     }
+
+    pub fn with_metadata(
+        fields: Vec<DataField>,
+        metadata: BTreeMap<String, String>,
+    ) -> DataSchemaRef {
+        Arc::new(DataSchema { fields, metadata })
+    }
 }
 
 impl From<&ArrowSchema> for DataSchema {

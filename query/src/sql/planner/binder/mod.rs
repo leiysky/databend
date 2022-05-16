@@ -14,6 +14,7 @@
 
 use std::sync::Arc;
 
+pub use aggregate::AggregateInfo;
 pub use bind_context::BindContext;
 pub use bind_context::ColumnBinding;
 use common_ast::ast::Statement;

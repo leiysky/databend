@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use common_exception::ErrorCode;
+use common_exception::Result;
+
 use crate::sql::plans::BasePlan;
 use crate::sql::plans::BasePlanImpl;
 use crate::sql::plans::PlanType;
@@ -57,6 +60,12 @@ impl SExpr {
 
     pub fn children(&self) -> &[SExpr] {
         &self.children
+    }
+
+    pub fn child(&self, n: usize) -> Result<&SExpr> {
+        self.children
+            .get(n)
+            .ok_or(ErrorCode::LogicalError("Invalid child index"))
     }
 
     pub fn arity(&self) -> usize {

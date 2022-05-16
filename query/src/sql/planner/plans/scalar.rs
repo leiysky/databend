@@ -194,6 +194,8 @@ impl ScalarExpr for ComparisonExpr {
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct AggregateFunction {
+    pub display_name: String,
+
     pub func_name: String,
     pub distinct: bool,
     pub params: Vec<DataValue>,

@@ -19,6 +19,7 @@ use common_datavalues::prelude::*;
 use common_exception::ErrorCode;
 use common_exception::Result;
 
+use super::aggregate::AggregateInfo;
 use crate::sql::common::IndexType;
 use crate::sql::plans::Scalar;
 
@@ -51,6 +52,9 @@ pub struct ColumnBinding {
 pub struct BindContext {
     _parent: Option<Box<BindContext>>,
     pub columns: Vec<ColumnBinding>,
+
+    /// Aggregate information, is `Some` when in aggregate context, for example in `HAVING`
+    pub agg_info: Option<AggregateInfo>,
 }
 
 impl BindContext {
@@ -62,6 +66,7 @@ impl BindContext {
         BindContext {
             _parent: Some(parent),
             columns: vec![],
+            agg_info: None,
         }
     }
 
@@ -155,5 +160,11 @@ impl BindContext {
             .iter()
             .map(|col| (col.index, col.column_name.clone()))
             .collect()
+    }
+
+    /// Return true if in aggregate context. Only group items and aggregate
+    /// functions can be accessed in such a context.
+    pub fn in_group_context(&self) -> bool {
+        self.agg_info.is_some()
     }
 }

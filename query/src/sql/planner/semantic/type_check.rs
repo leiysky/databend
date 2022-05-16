@@ -35,6 +35,7 @@ use common_functions::scalars::CastFunction;
 use common_functions::scalars::FunctionFactory;
 
 use crate::sessions::QueryContext;
+use crate::sql::binder::AggregateInfo;
 use crate::sql::binder::Binder;
 use crate::sql::planner::metadata::optimize_remove_count_args;
 use crate::sql::plans::AggregateFunction;
@@ -49,6 +50,7 @@ use crate::sql::plans::OrExpr;
 use crate::sql::plans::Scalar;
 use crate::sql::plans::SubqueryExpr;
 use crate::sql::BindContext;
+use crate::sql::ScalarExpr;
 
 /// A helper for type checking.
 ///
@@ -87,6 +89,15 @@ impl<'a> TypeChecker<'a> {
         expr: &Expr<'a>,
         required_type: Option<DataTypeImpl>,
     ) -> Result<(Scalar, DataTypeImpl)> {
+        // If we are in aggregate context, we will first try to find a aggregate
+        // function or group item.
+        if let Some(agg_info) = &self.bind_context.agg_info {
+            if let Some(scalar) = self.resolve_aggregate_context(expr, agg_info) {
+                let data_type = scalar.data_type();
+                return Ok((scalar, data_type));
+            }
+        }
+
         match expr {
             Expr::ColumnRef {
                 database: _,
@@ -287,6 +298,8 @@ impl<'a> TypeChecker<'a> {
 
                     Ok((
                         AggregateFunction {
+                            display_name: format!("{:#}", expr),
+
                             func_name: func_name.to_string(),
                             distinct: *distinct,
                             params,
@@ -315,6 +328,8 @@ impl<'a> TypeChecker<'a> {
 
                 Ok((
                     AggregateFunction {
+                        display_name: format!("{:#}", expr),
+
                         func_name: "count".to_string(),
                         distinct: false,
                         params: vec![],
@@ -644,5 +659,23 @@ impl<'a> TypeChecker<'a> {
         };
 
         Ok((value, data_type))
+    }
+
+    pub fn resolve_aggregate_context(
+        &self,
+        expr: &Expr<'a>,
+        agg_info: &AggregateInfo,
+    ) -> Option<Scalar> {
+        // Try resolve with group item
+        let original_name = format!("{:#}", expr);
+        if let Some(column) = agg_info.group_items_map.get(&original_name) {
+            return Some(
+                BoundColumnRef {
+                    column: column.clone(),
+                }
+                .into(),
+            );
+        }
+        None
     }
 }

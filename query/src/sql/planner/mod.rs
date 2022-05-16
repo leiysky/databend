@@ -69,8 +69,8 @@ impl Planner {
         let result_columns = bind_result.bind_context.result_columns();
         let pb = PipelineBuilder::new(
             self.ctx.clone(),
-            result_columns,
             bind_result.metadata,
+            result_columns,
             optimized_expr,
         );
         let pipelines = pb.spawn()?;

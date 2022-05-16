@@ -105,21 +105,17 @@ impl<'a> Binder {
             .normalize_select_list(&from_context, &stmt.select_list)
             .await?;
 
-        let agg_info = self.analyze_aggregate(&output_context)?;
+        let agg_info = self
+            .analyze_aggregate(&output_context, &stmt.group_by)
+            .await?;
         if !agg_info.aggregate_functions.is_empty() || !stmt.group_by.is_empty() {
             (s_expr, output_context) = self
-                .bind_group_by(
-                    &from_context,
-                    output_context,
-                    s_expr,
-                    &stmt.group_by,
-                    &agg_info,
-                )
+                .bind_aggregate(&from_context, output_context, s_expr, agg_info)
                 .await?;
         }
 
         if let Some(expr) = &stmt.having {
-            s_expr = self.bind_where(&from_context, expr, s_expr, true).await?;
+            s_expr = self.bind_where(&output_context, expr, s_expr, true).await?;
         }
 
         s_expr = self.bind_projection(&output_context, s_expr)?;
