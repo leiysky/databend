@@ -39,7 +39,6 @@ use super::ExchangeSource;
 use super::Filter;
 use super::HashJoin;
 use super::Limit;
-use super::Project;
 use super::Sort;
 use super::TableScan;
 use crate::evaluator::EvalNode;

@@ -30,7 +30,6 @@ use crate::sql::executor::HashJoin;
 use crate::sql::executor::Limit;
 use crate::sql::executor::PhysicalPlan;
 use crate::sql::executor::PhysicalScalar;
-use crate::sql::executor::Project;
 use crate::sql::executor::Sort;
 use crate::sql::executor::TableScan;
 use crate::sql::executor::UnionAll;
@@ -54,7 +53,6 @@ impl<'a> Display for PhysicalPlanIndentFormatDisplay<'a> {
         match self.node {
             PhysicalPlan::TableScan(scan) => write!(f, "{}", scan)?,
             PhysicalPlan::Filter(filter) => write!(f, "{}", filter)?,
-            PhysicalPlan::Project(project) => write!(f, "{}", project)?,
             PhysicalPlan::EvalScalar(eval_scalar) => write!(f, "{}", eval_scalar)?,
             PhysicalPlan::AggregatePartial(aggregate) => write!(f, "{}", aggregate)?,
             PhysicalPlan::AggregateFinal(aggregate) => write!(f, "{}", aggregate)?,
@@ -114,24 +112,6 @@ impl Display for PhysicalScalar {
             }
             PhysicalScalar::IndexedVariable { index, .. } => write!(f, "${index}"),
         }
-    }
-}
-
-impl Display for Project {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Ok(input_schema) = self.input.output_schema() {
-            let project_columns_name = self
-                .projections
-                .iter()
-                .sorted()
-                .map(|idx| input_schema.field(*idx).name())
-                .cloned()
-                .collect::<Vec<String>>();
-
-            return write!(f, "Project: [{}]", project_columns_name.join(", "));
-        }
-
-        write!(f, "Project: [{:?}]", self.projections)
     }
 }
 

@@ -25,7 +25,6 @@ use super::Filter;
 use super::HashJoin;
 use super::Limit;
 use super::PhysicalPlan;
-use super::Project;
 use super::Sort;
 use super::TableScan;
 use crate::sql::executor::UnionAll;
@@ -35,7 +34,6 @@ pub trait PhysicalPlanReplacer {
         match plan {
             PhysicalPlan::TableScan(plan) => self.replace_table_scan(plan),
             PhysicalPlan::Filter(plan) => self.replace_filter(plan),
-            PhysicalPlan::Project(plan) => self.replace_project(plan),
             PhysicalPlan::EvalScalar(plan) => self.replace_eval_scalar(plan),
             PhysicalPlan::AggregatePartial(plan) => self.replace_aggregate_partial(plan),
             PhysicalPlan::AggregateFinal(plan) => self.replace_aggregate_final(plan),
@@ -60,16 +58,6 @@ pub trait PhysicalPlanReplacer {
         Ok(PhysicalPlan::Filter(Filter {
             input: Box::new(input),
             predicates: plan.predicates.clone(),
-        }))
-    }
-
-    fn replace_project(&mut self, plan: &Project) -> Result<PhysicalPlan> {
-        let input = self.replace(&plan.input)?;
-
-        Ok(PhysicalPlan::Project(Project {
-            input: Box::new(input),
-            projections: plan.projections.clone(),
-            columns: plan.columns.clone(),
         }))
     }
 
@@ -207,9 +195,6 @@ impl PhysicalPlan {
             match plan {
                 PhysicalPlan::TableScan(_) => {}
                 PhysicalPlan::Filter(plan) => {
-                    Self::traverse(&plan.input, pre_visit, visit, post_visit);
-                }
-                PhysicalPlan::Project(plan) => {
                     Self::traverse(&plan.input, pre_visit, visit, post_visit);
                 }
                 PhysicalPlan::EvalScalar(plan) => {

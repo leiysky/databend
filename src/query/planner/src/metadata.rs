@@ -31,8 +31,9 @@ use parking_lot::RwLock;
 /// This type will be used across the whole planner.
 pub type IndexType = usize;
 
-/// Use IndexType::MAX to represent dummy table.
+/// Use IndexType::MAX to represent dummy table and column.
 pub static DUMMY_TABLE_INDEX: IndexType = IndexType::MAX;
+pub static DUMMY_COLUMN_INDEX: IndexType = IndexType::MAX;
 
 /// ColumnSet represents a set of columns identified by its IndexType.
 pub type ColumnSet = HashSet<IndexType>;

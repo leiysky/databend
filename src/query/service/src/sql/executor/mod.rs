@@ -21,6 +21,7 @@ mod physical_plan_visitor;
 mod physical_scalar;
 mod pipeline_builder;
 mod util;
+mod context;
 
 pub use expression_builder::ExpressionBuilder;
 pub use expression_builder::ExpressionBuilderWithRenaming;

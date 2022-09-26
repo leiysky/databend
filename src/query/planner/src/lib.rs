@@ -28,6 +28,7 @@ pub use metadata::IndexType;
 pub use metadata::Metadata;
 pub use metadata::MetadataRef;
 pub use metadata::TableEntry;
+pub use metadata::DUMMY_COLUMN_INDEX;
 pub use metadata::DUMMY_TABLE_INDEX;
 
 // Plan will be used publicly.

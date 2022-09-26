@@ -41,7 +41,6 @@ pub type ColumnID = String;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct TableScan {
-    pub name_mapping: BTreeMap<String, ColumnID>,
     pub source: Box<ReadDataSourcePlan>,
 
     /// Only used for display
@@ -50,13 +49,7 @@ pub struct TableScan {
 
 impl TableScan {
     pub fn output_schema(&self) -> Result<DataSchemaRef> {
-        let mut fields = Vec::with_capacity(self.name_mapping.len());
-        let schema = self.source.schema();
-        for (name, id) in self.name_mapping.iter() {
-            let orig_field = schema.field_with_name(name)?;
-            fields.push(DataField::new(id.as_str(), orig_field.data_type().clone()));
-        }
-        Ok(DataSchemaRefExt::create(fields))
+        Ok(self.source.schema())
     }
 }
 
@@ -69,26 +62,6 @@ pub struct Filter {
 impl Filter {
     pub fn output_schema(&self) -> Result<DataSchemaRef> {
         self.input.output_schema()
-    }
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct Project {
-    pub input: Box<PhysicalPlan>,
-    pub projections: Vec<usize>,
-
-    /// Only used for display
-    pub columns: ColumnSet,
-}
-
-impl Project {
-    pub fn output_schema(&self) -> Result<DataSchemaRef> {
-        let input_schema = self.input.output_schema()?;
-        let mut fields = Vec::new();
-        for i in self.projections.iter() {
-            fields.push(input_schema.field(*i).clone());
-        }
-        Ok(DataSchemaRefExt::create(fields))
     }
 }
 
@@ -356,7 +329,6 @@ impl DistributedInsertSelect {
 pub enum PhysicalPlan {
     TableScan(TableScan),
     Filter(Filter),
-    Project(Project),
     EvalScalar(EvalScalar),
     AggregatePartial(AggregatePartial),
     AggregateFinal(AggregateFinal),
@@ -387,7 +359,6 @@ impl PhysicalPlan {
         match self {
             PhysicalPlan::TableScan(plan) => plan.output_schema(),
             PhysicalPlan::Filter(plan) => plan.output_schema(),
-            PhysicalPlan::Project(plan) => plan.output_schema(),
             PhysicalPlan::EvalScalar(plan) => plan.output_schema(),
             PhysicalPlan::AggregatePartial(plan) => plan.output_schema(),
             PhysicalPlan::AggregateFinal(plan) => plan.output_schema(),
@@ -406,7 +377,6 @@ impl PhysicalPlan {
         match self {
             PhysicalPlan::TableScan(_) => Box::new(std::iter::empty()),
             PhysicalPlan::Filter(plan) => Box::new(std::iter::once(plan.input.as_ref())),
-            PhysicalPlan::Project(plan) => Box::new(std::iter::once(plan.input.as_ref())),
             PhysicalPlan::EvalScalar(plan) => Box::new(std::iter::once(plan.input.as_ref())),
             PhysicalPlan::AggregatePartial(plan) => Box::new(std::iter::once(plan.input.as_ref())),
             PhysicalPlan::AggregateFinal(plan) => Box::new(std::iter::once(plan.input.as_ref())),

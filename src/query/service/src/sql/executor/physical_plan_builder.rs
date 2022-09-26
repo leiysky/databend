@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -34,6 +35,7 @@ use common_planner::DUMMY_TABLE_INDEX;
 use common_storages_fuse::TableContext;
 use itertools::Itertools;
 
+use super::context::ChunkContext;
 use super::AggregateFinal;
 use super::AggregatePartial;
 use super::Exchange as PhysicalExchange;
@@ -111,13 +113,13 @@ impl PhysicalPlanBuilder {
     }
 
     #[async_recursion::async_recursion]
-    pub async fn build(&self, s_expr: &SExpr) -> Result<PhysicalPlan> {
+    pub async fn build(&self, context: &mut ChunkContext, s_expr: &SExpr) -> Result<PhysicalPlan> {
         debug_assert!(check_physical(s_expr));
 
         match s_expr.plan() {
             RelOperator::PhysicalScan(scan) => {
                 let mut has_inner_column = false;
-                let mut name_mapping = BTreeMap::new();
+                let mut name_mapping = HashMap::<String, IndexType>::new();
                 let metadata = self.metadata.read().clone();
                 for index in scan.columns.iter() {
                     let column = metadata.column(*index);
@@ -128,11 +130,11 @@ impl PhysicalPlanBuilder {
                         // if there is a prewhere optimization,
                         // we can prune `PhysicalScan`'s output schema.
                         if prewhere.output_columns.contains(index) {
-                            name_mapping.insert(column.name().to_string(), index.to_string());
+                            name_mapping.insert(column.name().to_string(), *index);
                         }
                     } else {
                         let name = column.name().to_string();
-                        name_mapping.insert(name, index.to_string());
+                        name_mapping.insert(name, *index);
                     }
                 }
 
@@ -149,12 +151,21 @@ impl PhysicalPlanBuilder {
                         Some(push_downs),
                     )
                     .await?;
+
+                // Build chunk context with projected table schema
+                for field in source.schema().fields() {
+                    let name = field.name().to_string();
+                    if let Some(index) = name_mapping.get(&name) {
+                        context.append(*index);
+                    }
+                }
+
                 Ok(PhysicalPlan::TableScan(TableScan {
-                    name_mapping,
                     source: Box::new(source),
                     table_index: scan.table_index,
                 }))
             }
+
             RelOperator::DummyTableScan(_) => {
                 let catalogs = CatalogManager::instance();
                 let table = catalogs
@@ -164,15 +175,32 @@ impl PhysicalPlanBuilder {
                 let source = table
                     .read_plan_with_catalog(self.ctx.clone(), CATALOG_DEFAULT.to_string(), None)
                     .await?;
+                context.append(DUMMY_TABLE_INDEX);
                 Ok(PhysicalPlan::TableScan(TableScan {
-                    name_mapping: BTreeMap::from([("dummy".to_string(), "dummy".to_string())]),
                     source: Box::new(source),
                     table_index: DUMMY_TABLE_INDEX,
                 }))
             }
+
             RelOperator::PhysicalHashJoin(join) => {
-                let build_side = self.build(s_expr.child(1)?).await?;
-                let probe_side = self.build(s_expr.child(0)?).await?;
+                let mut build_chunk_context = ChunkContext::default();
+                let mut probe_chunk_context = ChunkContext::default();
+                let build_side = self
+                    .build(&mut build_chunk_context, s_expr.child(1)?)
+                    .await?;
+                let probe_side = self
+                    .build(&mut probe_chunk_context, s_expr.child(0)?)
+                    .await?;
+
+                *context = ChunkContext::new(
+                    probe_chunk_context
+                        .column_indices
+                        .iter()
+                        .chain(build_chunk_context.column_indices.iter())
+                        .copied()
+                        .collect(),
+                );
+
                 Ok(PhysicalPlan::HashJoin(HashJoin {
                     build: Box::new(build_side),
                     probe: Box::new(probe_side),
@@ -181,7 +209,7 @@ impl PhysicalPlanBuilder {
                         .build_keys
                         .iter()
                         .map(|v| {
-                            let mut builder = PhysicalScalarBuilder;
+                            let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
                             builder.build(v)
                         })
                         .collect::<Result<_>>()?,
@@ -189,7 +217,7 @@ impl PhysicalPlanBuilder {
                         .probe_keys
                         .iter()
                         .map(|v| {
-                            let mut builder = PhysicalScalarBuilder;
+                            let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
                             builder.build(v)
                         })
                         .collect::<Result<_>>()?,
@@ -197,7 +225,7 @@ impl PhysicalPlanBuilder {
                         .other_conditions
                         .iter()
                         .map(|v| {
-                            let mut builder = PhysicalScalarBuilder;
+                            let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
                             builder.build(v)
                         })
                         .collect::<Result<_>>()?,
@@ -205,31 +233,38 @@ impl PhysicalPlanBuilder {
                     from_correlated_subquery: join.from_correlated_subquery,
                 }))
             }
-            RelOperator::EvalScalar(eval_scalar) => Ok(PhysicalPlan::EvalScalar(EvalScalar {
-                input: Box::new(self.build(s_expr.child(0)?).await?),
-                scalars: eval_scalar
-                    .items
-                    .iter()
-                    .map(|item| {
-                        let mut builder = PhysicalScalarBuilder;
-                        Ok((builder.build(&item.scalar)?, item.index.to_string()))
-                    })
-                    .collect::<Result<_>>()?,
-            })),
+
+            RelOperator::EvalScalar(eval_scalar) => {
+                for item in eval_scalar.items.iter() {
+                    context.append(item.index);
+                }
+                Ok(PhysicalPlan::EvalScalar(EvalScalar {
+                    input: Box::new(self.build(context, s_expr.child(0)?).await?),
+                    scalars: eval_scalar
+                        .items
+                        .iter()
+                        .map(|item| {
+                            let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
+                            Ok((builder.build(&item.scalar)?, item.index.to_string()))
+                        })
+                        .collect::<Result<_>>()?,
+                }))
+            }
 
             RelOperator::Filter(filter) => Ok(PhysicalPlan::Filter(Filter {
-                input: Box::new(self.build(s_expr.child(0)?).await?),
+                input: Box::new(self.build(context, s_expr.child(0)?).await?),
                 predicates: filter
                     .predicates
                     .iter()
                     .map(|pred| {
-                        let mut builder = PhysicalScalarBuilder;
+                        let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
                         builder.build(pred)
                     })
                     .collect::<Result<_>>()?,
             })),
+
             RelOperator::Aggregate(agg) => {
-                let input = self.build(s_expr.child(0)?).await?;
+                let input = self.build(context, s_expr.child(0)?).await?;
                 let group_items: Vec<ColumnID> = agg
                     .group_items
                     .iter()
@@ -294,6 +329,11 @@ impl PhysicalPlanBuilder {
                     AggregateMode::Final => match input {
                         PhysicalPlan::AggregatePartial(ref agg) => {
                             let before_group_by_schema = agg.input.output_schema()?;
+                            let mut output_context = ChunkContext::default();
+                            for field in before_group_by_schema.fields() {
+                                output_context.append(field.name());
+                            }
+
                             PhysicalPlan::AggregateFinal(AggregateFinal {
                                 input: Box::new(input),
                                 group_by: group_items,
@@ -322,8 +362,9 @@ impl PhysicalPlanBuilder {
 
                 Ok(result)
             }
+
             RelOperator::Sort(sort) => Ok(PhysicalPlan::Sort(Sort {
-                input: Box::new(self.build(s_expr.child(0)?).await?),
+                input: Box::new(self.build(context, s_expr.child(0)?).await?),
                 order_by: sort
                     .items
                     .iter()
@@ -335,17 +376,19 @@ impl PhysicalPlanBuilder {
                     .collect(),
                 limit: sort.limit,
             })),
+
             RelOperator::Limit(limit) => Ok(PhysicalPlan::Limit(Limit {
-                input: Box::new(self.build(s_expr.child(0)?).await?),
+                input: Box::new(self.build(context, s_expr.child(0)?).await?),
                 limit: limit.limit,
                 offset: limit.offset,
             })),
+
             RelOperator::Exchange(exchange) => {
                 let mut keys = vec![];
                 let kind = match exchange {
                     Exchange::Hash(scalars) => {
                         for scalar in scalars {
-                            let mut builder = PhysicalScalarBuilder;
+                            let mut builder = PhysicalScalarBuilder::with_chunk_context(context);
                             keys.push(builder.build(scalar)?);
                         }
                         StageKind::Normal
@@ -354,13 +397,15 @@ impl PhysicalPlanBuilder {
                     Exchange::Merge => StageKind::Merge,
                 };
                 Ok(PhysicalPlan::Exchange(PhysicalExchange {
-                    input: Box::new(self.build(s_expr.child(0)?).await?),
+                    input: Box::new(self.build(context, s_expr.child(0)?).await?),
                     kind,
                     keys,
                 }))
             }
+
             RelOperator::UnionAll(op) => {
-                let left = self.build(s_expr.child(0)?).await?;
+                let mut left_context = ChunkContext::default();
+                let left = self.build(&mut left_context, s_expr.child(0)?).await?;
                 let left_schema = left.output_schema()?;
                 let pairs = op
                     .pairs
@@ -371,13 +416,20 @@ impl PhysicalPlanBuilder {
                     .iter()
                     .map(|(left, _)| Ok(left_schema.field_with_name(left)?.clone()))
                     .collect::<Result<Vec<_>>>()?;
+
+                let mut right_context = ChunkContext::default();
+
+                *context =
+                    ChunkContext::new(op.pairs.iter().map(|(left, _)| *left).collect::<Vec<_>>());
+
                 Ok(PhysicalPlan::UnionAll(UnionAll {
                     left: Box::new(left),
-                    right: Box::new(self.build(s_expr.child(1)?).await?),
+                    right: Box::new(self.build(&mut right_context, s_expr.child(1)?).await?),
                     pairs,
                     schema: DataSchemaRefExt::create(fields),
                 }))
             }
+
             _ => Err(ErrorCode::LogicalError(format!(
                 "Unsupported physical plan: {:?}",
                 s_expr.plan()
@@ -492,16 +544,45 @@ impl PhysicalPlanBuilder {
     }
 }
 
-pub struct PhysicalScalarBuilder;
+#[derive(Default)]
+pub struct PhysicalScalarBuilder<'a> {
+    context: Option<&'a ChunkContext>,
+}
 
 #[allow(clippy::only_used_in_recursion)]
-impl PhysicalScalarBuilder {
-    pub fn build(&mut self, scalar: &Scalar) -> Result<PhysicalScalar> {
+impl<'a> PhysicalScalarBuilder<'a> {
+    pub fn with_chunk_context(context: &'a ChunkContext) -> Self {
+        Self {
+            context: Some(context),
+        }
+    }
+
+    pub fn build(mut self, scalar: &Scalar) -> Result<PhysicalScalar> {
         match scalar {
-            Scalar::BoundColumnRef(column_ref) => Ok(PhysicalScalar::Variable {
-                column_id: column_ref.column.index.to_string(),
-                data_type: column_ref.data_type(),
-            }),
+            Scalar::BoundColumnRef(column_ref) => {
+                match self.context {
+                    Some(context) => {
+                        // Remap column index to chunk offset
+                        let chunk_offset = self
+                            .context
+                            .get_chunk_offset(column_ref.column.index)
+                            .ok_or_else(|| {
+                            ErrorCode::LogicalError(format!(
+                                "Invalid column index: {}",
+                                column_ref.column.index
+                            ))
+                        })?;
+                        Ok(PhysicalScalar::IndexedVariable {
+                            index: chunk_offset,
+                            data_type: column_ref.data_type(),
+                        })
+                    }
+                    None => Ok(PhysicalScalar::Variable {
+                        column_id: column_ref.column.index.to_string(),
+                        data_type: column_ref.data_type(),
+                    }),
+                }
+            }
             Scalar::ConstantExpr(constant) => Ok(PhysicalScalar::Constant {
                 value: constant.value.clone(),
                 data_type: *constant.data_type.clone(),

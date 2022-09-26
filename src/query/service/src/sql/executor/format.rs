@@ -29,7 +29,6 @@ use super::Filter;
 use super::HashJoin;
 use super::Limit;
 use super::PhysicalPlan;
-use super::Project;
 use super::Sort;
 use super::TableScan;
 use super::UnionAll;
