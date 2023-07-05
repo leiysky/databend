@@ -2480,7 +2480,10 @@ name = "common-profile"
 version = "0.1.0"
 dependencies = [
  "common-base",
+ "common-exception",
  "dashmap",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

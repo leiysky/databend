@@ -15,7 +15,9 @@
 mod mgr;
 mod proc;
 mod prof;
+mod record;
 
 pub use mgr::QueryProfileManager;
 pub use proc::*;
 pub use prof::*;
+pub use record::*;

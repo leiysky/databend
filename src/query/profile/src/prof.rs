@@ -16,6 +16,9 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::time::Duration;
 
+use common_exception::ErrorCode;
+use common_exception::Result;
+
 use crate::ProcessorProfile;
 
 #[derive(Debug, Clone)]
@@ -74,6 +77,30 @@ pub enum OperatorType {
     Insert,
 }
 
+impl OperatorType {
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "Join" => Ok(OperatorType::Join),
+            "Aggregate" => Ok(OperatorType::Aggregate),
+            "AggregateExpand" => Ok(OperatorType::AggregateExpand),
+            "Filter" => Ok(OperatorType::Filter),
+            "ProjectSet" => Ok(OperatorType::ProjectSet),
+            "EvalScalar" => Ok(OperatorType::EvalScalar),
+            "Limit" => Ok(OperatorType::Limit),
+            "TableScan" => Ok(OperatorType::TableScan),
+            "Sort" => Ok(OperatorType::Sort),
+            "UnionAll" => Ok(OperatorType::UnionAll),
+            "Project" => Ok(OperatorType::Project),
+            "Window" => Ok(OperatorType::Window),
+            "RowFetch" => Ok(OperatorType::RowFetch),
+            "Exchange" => Ok(OperatorType::Exchange),
+            "RuntimeFilter" => Ok(OperatorType::RuntimeFilter),
+            "Insert" => Ok(OperatorType::Insert),
+            _ => Err(ErrorCode::Internal(format!("Unknown operator type: {}", s))),
+        }
+    }
+}
+
 impl Display for OperatorType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -124,7 +151,15 @@ impl From<&ProcessorProfile> for OperatorExecutionInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+/// Attribute of the plan operator.
+///
+/// Each variant of [`OperatorType`] has a corresponding variant in this enum.
+///
+/// We can not derive `serde::Deserialize` for this enum because
+/// the tag is outside of the JSON object, which is actually held
+/// by the [`OperatorProfile`] struct.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(untagged)]
 pub enum OperatorAttribute {
     Join(JoinAttribute),
     Aggregate(AggregateAttribute),
@@ -140,62 +175,67 @@ pub enum OperatorAttribute {
     Empty,
 }
 
-#[derive(Debug, Clone)]
+impl Default for OperatorAttribute {
+    fn default() -> Self {
+        OperatorAttribute::Empty
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct JoinAttribute {
     pub join_type: String,
     pub equi_conditions: String,
     pub non_equi_conditions: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AggregateAttribute {
-    pub group_keys: String,
-    pub functions: String,
+    pub group_keys: Vec<String>,
+    pub functions: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AggregateExpandAttribute {
-    pub group_keys: String,
-    pub aggr_exprs: String,
+    pub group_keys_set: Vec<Vec<String>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EvalScalarAttribute {
-    pub scalars: String,
+    pub scalars: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectSetAttribute {
-    pub functions: String,
+    pub functions: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FilterAttribute {
     pub predicate: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LimitAttribute {
     pub limit: usize,
     pub offset: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SortAttribute {
-    pub sort_keys: String,
+    pub sort_keys: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TableScanAttribute {
     pub qualified_name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowAttribute {
-    pub functions: String,
+    pub function: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ExchangeAttribute {
     pub exchange_mode: String,
 }

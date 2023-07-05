@@ -12,5 +12,8 @@ test = false
 
 [dependencies]
 common-base = { path = "../../common/base" }
+common-exception = { path = "../../common/exception" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 dashmap = "5.4"

@@ -34,71 +34,11 @@ use common_meta_app::schema::TableMeta;
 use common_profile::OperatorAttribute;
 use common_profile::OperatorExecutionInfo;
 use common_profile::QueryProfileManager;
+use common_profile::SerializableExecutionInfo;
+use common_profile::SerializableOperatorAttribute;
 
 use crate::SyncOneBlockSystemTable;
 use crate::SyncSystemTable;
-
-// Encode an `OperatorAttribute` into jsonb::Value.
-fn encode_operator_attribute(attr: &OperatorAttribute) -> jsonb::Value {
-    match attr {
-        OperatorAttribute::Join(join_attr) => (&serde_json::json! ({
-            "join_type": join_attr.join_type,
-            "equi_conditions": join_attr.equi_conditions,
-            "non_equi_conditions": join_attr.non_equi_conditions,
-        }))
-            .into(),
-        OperatorAttribute::Aggregate(agg_attr) => (&serde_json::json!({
-            "group_keys": agg_attr.group_keys,
-            "functions": agg_attr.functions,
-        }))
-            .into(),
-        OperatorAttribute::AggregateExpand(expand_attr) => (&serde_json::json!({
-            "group_keys": expand_attr.group_keys,
-            "aggr_exprs": expand_attr.aggr_exprs,
-        }))
-            .into(),
-        OperatorAttribute::Filter(filter_attr) => {
-            (&serde_json::json!({ "predicate": filter_attr.predicate })).into()
-        }
-        OperatorAttribute::EvalScalar(scalar_attr) => {
-            (&serde_json::json!({ "scalars": scalar_attr.scalars })).into()
-        }
-        OperatorAttribute::ProjectSet(project_attr) => {
-            (&serde_json::json!({ "functions": project_attr.functions })).into()
-        }
-        OperatorAttribute::Limit(limit_attr) => (&serde_json::json!({
-            "limit": limit_attr.limit,
-            "offset": limit_attr.offset,
-        }))
-            .into(),
-        OperatorAttribute::TableScan(scan_attr) => {
-            (&serde_json::json!({ "qualified_name": scan_attr.qualified_name })).into()
-        }
-        OperatorAttribute::Sort(sort_attr) => {
-            (&serde_json::json!({ "sort_keys": sort_attr.sort_keys })).into()
-        }
-        OperatorAttribute::Window(window_attr) => {
-            (&serde_json::json!({ "functions": window_attr.functions })).into()
-        }
-        OperatorAttribute::Exchange(exchange_attr) => {
-            (&serde_json::json!({ "exchange_mode": exchange_attr.exchange_mode })).into()
-        }
-        OperatorAttribute::Empty => jsonb::Value::Null,
-    }
-}
-
-fn encode_operator_execution_info(info: &OperatorExecutionInfo) -> jsonb::Value {
-    // Process time represent with number of milliseconds.
-    let process_time = info.process_time.as_nanos() as f64 / 1e6;
-    (&serde_json::json!({
-        "process_time": process_time,
-        "input_rows": info.input_rows,
-        "input_bytes": info.input_bytes,
-        "output_rows": info.output_rows,
-        "output_bytes": info.output_bytes,
-    }))
-        .into()
-}
 
 pub struct QueryProfileTable {
     table_info: TableInfo,
@@ -153,17 +93,19 @@ impl SyncSystemTable for QueryProfileTable {
         let mut operator_attributes: Vec<Vec<u8>> = Vec::with_capacity(query_profs.len());
 
         for prof in query_profs.iter() {
-            for plan_prof in prof.operator_profiles.iter() {
+            for operator_prof in prof.operator_profiles.iter() {
                 query_ids.push(prof.query_id.clone().into_bytes());
-                operator_ids.push(plan_prof.id);
-                operator_types.push(plan_prof.operator_type.to_string().into_bytes());
-                operator_childrens.push(plan_prof.children.clone());
+                operator_ids.push(operator_prof.id);
+                operator_types.push(operator_prof.operator_type.to_string().into_bytes());
+                operator_childrens.push(operator_prof.children.clone());
 
-                let execution_info = encode_operator_execution_info(&plan_prof.execution_info);
-                execution_infos.push(execution_info.to_vec());
+                let execution_info = SerializableExecutionInfo::from(&operator_prof.execution_info);
+                let jsonb_value: jsonb::Value = (&serde_json::to_value(execution_info)?).into();
+                execution_infos.push(jsonb_value.to_vec());
 
-                let attribute_value = encode_operator_attribute(&plan_prof.attribute);
-                operator_attributes.push(attribute_value.to_vec());
+                let attribute_value = SerializableOperatorAttribute::from(&operator_prof.attribute);
+                let jsonb_value: jsonb::Value = (&serde_json::to_value(attribute_value)?).into();
+                operator_attributes.push(jsonb_value.to_vec());
             }
         }
 

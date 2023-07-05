@@ -118,7 +118,7 @@ fn flatten_plan_node_profile(
                         .exprs
                         .iter()
                         .map(|(expr, _)| expr.as_expr(&BUILTIN_FUNCTIONS).sql_display())
-                        .join(", "),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
@@ -136,7 +136,7 @@ fn flatten_plan_node_profile(
                         .srf_exprs
                         .iter()
                         .map(|(expr, _)| expr.as_expr(&BUILTIN_FUNCTIONS).sql_display())
-                        .join(", "),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
@@ -150,20 +150,16 @@ fn flatten_plan_node_profile(
                 execution_info: proc_prof.into(),
                 children: vec![expand.input.get_id()],
                 attribute: OperatorAttribute::AggregateExpand(AggregateExpandAttribute {
-                    group_keys: expand
+                    group_keys_set: expand
                         .grouping_sets
                         .iter()
                         .map(|columns| {
-                            format!(
-                                "[{}]",
-                                columns
-                                    .iter()
-                                    .map(|column| metadata.read().column(*column).name())
-                                    .join(", ")
-                            )
+                            columns
+                                .iter()
+                                .map(|column| metadata.read().column(*column).name())
+                                .collect()
                         })
-                        .join(", "),
-                    aggr_exprs: "".to_string(),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
@@ -181,12 +177,12 @@ fn flatten_plan_node_profile(
                         .group_by
                         .iter()
                         .map(|column| metadata.read().column(*column).name())
-                        .join(", "),
+                        .collect(),
                     functions: agg_partial
                         .agg_funcs
                         .iter()
                         .map(|desc| pretty_display_agg_desc(desc, metadata))
-                        .join(", "),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
@@ -204,12 +200,12 @@ fn flatten_plan_node_profile(
                         .group_by
                         .iter()
                         .map(|column| metadata.read().column(*column).name())
-                        .join(", "),
+                        .collect(),
                     functions: agg_final
                         .agg_funcs
                         .iter()
                         .map(|desc| pretty_display_agg_desc(desc, metadata))
-                        .join(", "),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
@@ -249,7 +245,7 @@ fn flatten_plan_node_profile(
                 children: vec![window.input.get_id()],
                 execution_info: proc_prof.into(),
                 attribute: OperatorAttribute::Window(WindowAttribute {
-                    functions: format!(
+                    function: format!(
                         "{} OVER (PARTITION BY {} ORDER BY {} {})",
                         func, partition_by, order_by, frame
                     ),
@@ -276,7 +272,7 @@ fn flatten_plan_node_profile(
                                 if desc.asc { "ASC" } else { "DESC" }
                             )
                         })
-                        .join(", "),
+                        .collect(),
                 }),
             };
             plan_node_profs.push(prof);
