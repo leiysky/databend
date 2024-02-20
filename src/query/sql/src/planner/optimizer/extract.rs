@@ -24,6 +24,7 @@ use crate::optimizer::SExpr;
 use crate::plans::Operator;
 use crate::plans::RelOp;
 use crate::plans::RelOperator;
+use crate::IndexType;
 
 /// A matcher used to describe a pattern to be matched.
 pub enum Matcher {
@@ -103,6 +104,142 @@ impl Matcher {
             } => predicate(op) && op.arity() == children.len(),
 
             Matcher::Leaf => true,
+        }
+    }
+}
+
+struct BindingIterator<'a> {
+    matcher: Matcher,
+    binding: Binding<'a>,
+}
+
+impl<'a> BindingIterator<'a> {
+    pub fn new(matcher: Matcher, binding: Binding<'a>) -> Self {
+        Self { matcher, binding }
+    }
+}
+
+impl<'a> Iterator for BindingIterator<'a> {
+    type Item = Result<SExpr>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut f = || {
+            loop {
+                match self.binding.extract() {
+                    Ok(Some(s_expr)) => {
+                        if self.matcher.matches(&s_expr) {
+                            let result = Some(s_expr);
+                            self.binding.shift()?;
+                            return Ok(result);
+                        } else if self.binding.shift()? {
+                            continue;
+                        } else {
+                            return Ok(None);
+                        }
+                    }
+                    Ok(None) => return Ok(None),
+                    Err(e) => return Err(e),
+                }
+            }
+        };
+
+        f().transpose()
+    }
+}
+
+enum Binding<'a> {
+    Expr {
+        memo: &'a Memo,
+        group_index: IndexType,
+        expr_index: IndexType,
+        children: Vec<Binding<'a>>,
+    },
+    Placeholder {
+        s_expr: SExpr,
+    },
+}
+
+impl<'a> Binding<'a> {
+    /// Extract the `SExpr` from the current binding.
+    fn extract(&self) -> Result<Option<SExpr>> {
+        match self {
+            Binding::Expr {
+                memo,
+                group_index,
+                expr_index,
+                children,
+            } => {
+                if *expr_index >= memo.group(*group_index)?.num_exprs() {
+                    return Ok(None);
+                }
+
+                Ok(Some(SExpr::create(
+                    memo.group(*group_index)?.m_expr(*expr_index)?.plan.clone(),
+                    children
+                        .iter()
+                        .filter_map(|child| child.extract().transpose().map(|v| v.map(Arc::new)))
+                        .collect::<Result<Vec<_>>>()?,
+                    Some(*group_index),
+                    Some(memo.group(*group_index)?.relational_prop.clone()),
+                    Some(memo.group(*group_index)?.stat_info.clone()),
+                )))
+            }
+            Binding::Placeholder { s_expr } => Ok(Some(s_expr.clone())),
+        }
+    }
+
+    /// Reset the current binding to the initial state.
+    fn reset(&mut self) {
+        match self {
+            Binding::Expr {
+                expr_index,
+                children,
+                ..
+            } => {
+                *expr_index = Default::default();
+                for child in children.iter_mut() {
+                    child.reset();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Shift the current binding to the next one.
+    /// Returns `true` if the binding is shifted successfully, otherwise `false`.
+    fn shift(&mut self) -> Result<bool> {
+        match self {
+            Binding::Expr {
+                memo,
+                group_index,
+                expr_index,
+                children,
+            } => {
+                let group = memo.group(*group_index)?;
+                loop {
+                    for child in children.iter_mut() {
+                        if child.shift()? {
+                            return Ok(true);
+                        } else {
+                            child.reset();
+                        }
+                    }
+
+                    *expr_index += 1;
+                    while *expr_index < group.m_exprs.len() {
+                        let m_expr = &group.m_exprs[*expr_index];
+                        if m_expr.arity() != children.len() {
+                            *expr_index += 1;
+                            continue;
+                        }
+
+                        return Ok(true);
+                    }
+
+                    return Ok(false);
+                }
+            }
+            Binding::Placeholder { .. } => Ok(false),
         }
     }
 }
